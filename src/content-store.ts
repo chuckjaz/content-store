@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as mkdirp from 'mkdirp';
-import * as hasher from './hasher';
 
+import {FileHasher} from './hasher';
 import {Entry, Entries, DirectoryEntry, isDirectory} from './entries';
 import {cbToP1, cbToP2, cbToP3} from './promise-adapters';
 
@@ -32,8 +32,21 @@ let symlinkp = cbToP3<string, string, string, void>(fs.symlink);
 
 export class ContentStore {
   private entering: {[name: string]: Promise<void>} = {};
+  private hasher: FileHasher;
   
-  constructor(private location: string, private hasher: hasher.FileHasher) { }
+  /**
+   * Construct a content store.
+   * 
+   * @param location directory to use for the content store. It will be creaed if it doesn't already exist.
+   * @param hasher the algorithm or file hasher impelmentation to use to hash the content of the files.
+   */
+  constructor(private location: string, hasher: FileHasher | string) {
+    if (typeof hasher === "string") {
+      this.hasher = new FileHasher(hasher);
+    } else {
+      this.hasher = hasher;
+    }
+  }
   
   /**
    * Enter a file into the content store. First calculates the hash of the file then,

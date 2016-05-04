@@ -18,5 +18,6 @@
     "expect": "^1.18.0",
     "mocha": "^2.4.5",
     "mock-fs": "^3.8.0"
-  }
+  },
+  "repository": "https://github.com/chuckjaz/content-store"
 }
