@@ -1,0 +1,22 @@
+{
+  "name": "content-store",
+  "version": "0.0.1",
+  "description": "Cache files by content",
+  "main": "index.js",
+  "scripts": {
+    "pretest": "tsc -p tsconfig.json",
+    "test": "mocha dist/tests",
+    "prepublish": "mkdir dist && cp LICENSE package.json dist"
+  },
+  "author": "Chuck Jazdzewski (chuckj@google.com)",
+  "license": "MIT",
+  "dependencies": {
+    "mkdirp": "^0.5.1",
+    "tmp": "0.0.28"
+  },
+  "devDependencies": {
+    "expect": "^1.18.0",
+    "mocha": "^2.4.5",
+    "mock-fs": "^3.8.0"
+  }
+}
