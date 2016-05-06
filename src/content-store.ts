@@ -119,9 +119,9 @@ export class ContentStore {
       await mkdirpp(fullHashName);
       await Promise.all(entries.map(entry => {
         if (isDirectory(entry)) {
-          return this.realizeHashedVirtualDirectory(path.join(fullHashName, entry.directory), entry.hash, entry.files);
+          return this.realizeHashedVirtualDirectory(path.join(fullHashName, entry.name), entry.hash, entry.files);
         } else {
-          return this.realize(path.join(fullHashName, entry.file), entry.hash);
+          return this.realize(path.join(fullHashName, entry.name), entry.hash);
         }
       }));
     }
@@ -139,10 +139,10 @@ export class ContentStore {
       return this.entering[entry.hash];
     }
     if (isDirectory(entry)) {
-      const fullDirectoryName = path.join(directory, entry.directory);
+      const fullDirectoryName = path.join(directory, entry.name);
       return this.enterHashedDirectory(fullDirectoryName, entry.files, entry.hash);
     } else {
-      const fullFileName = path.join(directory, entry.file);
+      const fullFileName = path.join(directory, entry.name);
       return this.enterHashedFile(fullFileName, entry.hash);
     }
   }
@@ -161,16 +161,7 @@ export class ContentStore {
       await Promise.all(entries.map(entry => this.ensureEntry(directory, entry)));
       await mkdirpp(fullDirectoryName);
       await Promise.all(entries.map(entry => {
-        let name: string;
-        let hash: string;
-        if (isDirectory(entry)) {
-          name = entry.directory;
-          hash = entry.hash;
-        } else {
-          name = entry.file;
-          hash = entry.hash;
-        }
-        return this.realize(path.join(fullDirectoryName, name), hash);
+        return this.realize(path.join(fullDirectoryName, entry.name), entry.hash);
       }));
     }
   }

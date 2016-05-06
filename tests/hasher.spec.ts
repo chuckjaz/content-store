@@ -42,19 +42,19 @@ describe('hasher', () => {
     return hasher.hashDir('test/dir1').then(result => {
       expect(result).toEqual([
         {
-          "file": "test1",
+          "name": "test1",
           "hash": "02d92c580d4ede6c80a878bdd9f3142d8f757be8"
         },
         {
-          "file": "test2",
+          "name": "test2",
           "hash": "02d92c580d4ede6c80a878bdd9f3142d8f757be8"
         },
         {
-          "file": "test3",
+          "name": "test3",
           "hash": "b437a399457d2752b876cc70d06ed5251015b064"
         },
         {
-          "file": "test4",
+          "name": "test4",
           "hash": "b437a399457d2752b876cc70d06ed5251015b064"
         }]);
     });

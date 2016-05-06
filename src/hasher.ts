@@ -56,8 +56,8 @@ export class FileHasher {
         return resolve(result);
       }
       files = files.sort();
-      files.map((file, i) => {
-        var fullPath = path.join(directory, file);
+      files.map((name, i) => {
+        var fullPath = path.join(directory, name);
         function report(info: Entry) {
           result[i] = info;
           if (--expected == 0) {
@@ -69,7 +69,7 @@ export class FileHasher {
           if (err) {
             if (err.code == 'ENOENT') {
               // Probably a symbolic link to a deleted or moved file.
-              return report({file: file, hash: 'missing'});
+              return report({name: name, hash: 'missing'});
             } else {
               return reportError(err);
             }
@@ -77,12 +77,12 @@ export class FileHasher {
           if (pathStat.isFile()) {
             this.hashOf(fullPath).then(hash => {
               if (failed) return;
-              report({ file: file, hash: hash });
+              report({ name, hash });
             });
           } else {
-            this.hashDir(fullPath).then(result =>  {
+            this.hashDir(fullPath).then(files =>  {
               if (failed) return;
-              report({directory: file, hash: this.hashEntries(result), files: result});
+              report({name, hash: this.hashEntries(files), files});
             });
           }
         });
@@ -102,7 +102,7 @@ export class FileHasher {
     hash.update(JSON.stringify(entries.map(data => {
       if (isDirectory(data)) {
         // Exclude the files from a directory as the file hashes are already part of the directory hash.
-        return { dirctory: data.directory, hash: data.hash };
+        return { name: data.name, hash: data.hash };
       }
       return data;
     })));

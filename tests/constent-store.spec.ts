@@ -96,7 +96,7 @@ function filter(entries: Entries, hasher: FileHasher, cb: (entry: FileEntry) => 
     if (isDirectory(entry)) {
       var newFiles = filter(entry.files, hasher, cb);
       var newHash = hasher.hashEntries(newFiles);
-      return { directory: entry.directory, hash: newHash, files: newFiles };
+      return { name: entry.name, hash: newHash, files: newFiles };
     } else if (cb(entry)) {
       return entry;
     } else {
@@ -161,7 +161,7 @@ describe('content-store', () => {
       return hasher.hashDir(original);
     }).then(entries => {
       // Filter out test4 to produce a virtual directory without it.
-      newEntries = filter(entries, hasher, file => file.file != 'test4');
+      newEntries = filter(entries, hasher, file => file.name != 'test4');
       return contentStore.realizeVirtualDirectory(realized, newEntries);
     }).then(hash => {
       // Hash the realized directory
