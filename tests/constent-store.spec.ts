@@ -26,7 +26,7 @@ const FILES = {
 
 interface Data {
   [name: string]: string | Data;
-}  
+}
 
 interface SetupInfo {
    name: string;
@@ -51,7 +51,7 @@ function rmdirRecursiveSync(root: string) {
         if (!deferred) {
           deferred = true;
           dirs.push(dir);
-        }  
+        }
         dirs.push(file);
       } else {
         fs.unlinkSync(file);
@@ -66,15 +66,15 @@ function rmdirRecursiveSync(root: string) {
 
 function setupData(): SetupInfo {
   const tmpDirInfo = dirSync();
-  
+
   function writeFile(filename: string, data: string) {
     fs.writeFileSync(filename, data, { encoding: 'utf8'});
   }
-  
+
   function writeDirectory(directory: string, create: boolean, data: Data) {
     if (create)
       fs.mkdirSync(directory);
-      
+
     for (let name in data) {
       let entry = data[name];
       let fullName = path.join(directory, name);
@@ -85,9 +85,9 @@ function setupData(): SetupInfo {
       }
     }
   }
-  
+
   writeDirectory(tmpDirInfo.name, false, FILES);
-  
+
   return { name: tmpDirInfo.name, cleanup:  () => rmdirRecursiveSync(tmpDirInfo.name) };
 }
 
@@ -110,7 +110,7 @@ describe('content-store', () => {
   let setupInfo: SetupInfo;
   let hasher: FileHasher;
   let contentStore: ContentStore;
-  
+
   beforeEach(() => setupInfo = setupData());
   afterEach(() => setupInfo.cleanup());
   beforeEach(() => hasher = new FileHasher('sha1'));
@@ -118,23 +118,52 @@ describe('content-store', () => {
     let cacheName = path.join(setupInfo.name, 'cache');
     contentStore = new ContentStore(cacheName, hasher);
   });
-  
+
   function tmpName(name: string): string {
     return path.join(setupInfo.name, name);
   }
-  
+
   it('should be able to enter a file', () => {
     return contentStore.enterFile(tmpName('test/dir1/test1'));
   });
-  
+
+  it('should be able to enter a stream', () => {
+    let fileName = tmpName('test/dir1/test1');
+    let stream = fs.createReadStream(fileName);
+    return contentStore.enterFile(stream);
+  })
+
   it('should be able to enter a directory', () => {
     return contentStore.enterDirectory(tmpName('test/dir1'));
   });
-  
+
   it('should be able to enter a tree', () => {
     return contentStore.enterDirectory(tmpName('test'));
   });
-  
+
+  it('should hash a stream the same as the equivlent file', async () => {
+    let fileName = tmpName('test/dir1/test1');
+    let fileHash = await hasher.hashOf(fileName);
+    let stream = fs.createReadStream(fileName);
+    let streamHash = await contentStore.enterFile(stream);
+    expect(streamHash).toEqual(fileHash);
+  });
+
+  it('should be able to enter the same file 1000 time as a file and stream', async () => {
+    let fileName = tmpName('test/dir1/test1');
+    let expectedHash = await hasher.hashOf(fileName);
+    await Promise.all(new Array(2000).map(async (_, i) => {
+      let hash: string;
+      if (i % 2 == 0)
+        hash = await contentStore.enterFile(fileName);
+      else {
+        let stream = fs.createReadStream(fileName);
+        hash = await contentStore.enterFile(stream);
+      }
+      expect(hash).toEqual(expectedHash);
+    }));
+  });
+
   it('should be able to enter and realize a tree', () => {
     let original = tmpName('test');
     let realized = tmpName('realized');
@@ -144,14 +173,14 @@ describe('content-store', () => {
     .then(() => {
       return Promise.all([
         hasher.hashDir(original),
-        hasher.hashDir(realized)  
+        hasher.hashDir(realized)
       ])
       .then(hashes => {
         expect(hashes[0]).toEqual(hashes[1]);
       })
     });
   });
-  
+
   it('should be able to realize a virtual tree', () => {
     let original = tmpName('test');
     let realized = tmpName('realized');
@@ -167,11 +196,11 @@ describe('content-store', () => {
       // Hash the realized directory
       return hasher.hashDir(realized);
     }).then(entries => {
-      // Expect the virtual description and the actual hash of thte 
+      // Expect the virtual description and the actual hash of the
       // realized directory are the same.
       let newEntriesHash = hasher.hashEntries(newEntries);
       let resultEntriesHash = hasher.hashEntries(entries);
-      
+
       expect(resultEntriesHash).toEqual(newEntriesHash);
     });
   });

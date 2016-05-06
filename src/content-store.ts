@@ -1,6 +1,9 @@
 import * as fs from 'fs';
+import * as stream from 'stream';
 import * as path from 'path';
 import * as mkdirp from 'mkdirp';
+import * as crypto from 'crypto';
+import * as tmp from 'tmp';
 
 import {FileHasher} from './hasher';
 import {Entry, Entries, DirectoryEntry, isDirectory} from './entries';
@@ -14,29 +17,75 @@ function existsp(file: string): Promise<boolean> {
   });
 }
 
-function copyFile(from: string, to: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let reader = fs.createReadStream(from);
-    let writer = fs.createWriteStream(to);
-    reader.on('end', resolve);
+class HashTransformStream extends stream.Transform {
+  private hasher: crypto.Hash;
+  private result: string;
+
+  constructor(algorithm: string, encoding?: string) {
+    super();
+    this.hasher = crypto.createHash(algorithm);
+    this.result = null;
+  }
+
+  get hash( ){
+    return this.result;
+  }
+
+  _transform(chunk: any, encoding: string, callback: Function): void {
+    this.hasher.update(chunk);
+    callback(null, chunk);
+
+  }
+
+  _flush(callback: Function): void {
+    this.result = this.hasher.digest('hex');
+    callback();
+  }
+};
+
+function copyStream(reader: fs.ReadStream, writer: fs.WriteStream): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const hasher = new HashTransformStream('sha1');
+    reader.on('end', () => {
+      setImmediate(() => {
+        resolve(hasher.hash);
+      });
+    });
     reader.on('error', reject);
     writer.on('error', reject);
-    reader.pipe(writer);
+    reader.pipe(hasher).pipe(writer);
   });
+}
+
+function copyFile(from: string, to: string): Promise<string> {
+  return copyStream(
+    fs.createReadStream(from),
+    fs.createWriteStream(to)
+  );
 }
 
 let mkdirpp = cbToP1(mkdirp);
 let writeFilep = cbToP2<string, any, void>(fs.writeFile);
 let link = cbToP2<string, string, void>(fs.link);
+let unlink = cbToP1<string, void>(fs.unlink);
 let symlinkp = cbToP3<string, string, string, void>(fs.symlink);
+
+async function tmpFileName(location: string): Promise<string> {
+  while(true) {
+    const candidateName = path.join(location, `tmp-${(Math.random() * 100000).toFixed(0).toString()}`);
+    if (!(await existsp(candidateName))) {
+      return candidateName;
+    }
+  }
+}
 
 export class ContentStore {
   private entering: {[name: string]: Promise<void>} = {};
   private hasher: FileHasher;
-  
+
   /**
    * Construct a content store.
-   * 
+   *
    * @param location directory to use for the content store. It will be creaed if it doesn't already exist.
    * @param hasher the algorithm or file hasher impelmentation to use to hash the content of the files.
    */
@@ -47,25 +96,29 @@ export class ContentStore {
       this.hasher = hasher;
     }
   }
-  
+
   /**
    * Enter a file into the content store. First calculates the hash of the file then,
    * using the hash, copies the file into the content store (if it is not already there).
-   * 
+   *
    * @param filename the file to enter into the content store.
    * @returns a promise for the hash of the file entered into the store.
    */
-  async enterFile(filename: string): Promise<string> {
+  async enterFile(file: string | fs.ReadStream): Promise<string> {
     let fullCacheName: string;
-    let hash = await this.hasher.hashOf(filename);
-    await this.enterHashedFile(filename, hash);
-    return hash;
+    if (typeof file === "string") {
+      let hash = await this.hasher.hashOf(file);
+      await this.enterHashedFile(file, hash);
+      return hash;
+    } else {
+      return await this.enterStream(file);
+    }
   }
-  
+
   /**
-   * Enter a directory into the content store. First calculates the hash of the 
+   * Enter a directory into the content store. First calculates the hash of the
    * content of the directory and then enters it into the store.
-   * 
+   *
    * @param the directory to enter into the content store.
    * @returns a promise for the hash of the directory entered into the store.
    */
@@ -75,10 +128,10 @@ export class ContentStore {
     await this.enterHashedDirectory(directory, results, hash);
     return hash;
   }
-  
+
   /**
    * Create a file or directory, linked back into content store, at the given location.
-   * 
+   *
    * @param location of the file or directory to link.
    * @returns a promise resolved when the file or directory is linked
    */
@@ -90,13 +143,13 @@ export class ContentStore {
     await link(fullHashName, location);
     return location;
   }
-  
+
   /**
    * A virtual directory is a directory that might not have physically existed
    * but, rather, was produced via some kind of filter. All the files referenced are
-   * assumed to already be entered in the cache but the directories might not be but 
+   * assumed to already be entered in the cache but the directories might not be but
    * can be manufactured by realizing the content of virtual directory.
-   * 
+   *
    * @param location the location for the directory to be created.
    * @param entries the enteries to resolve.
    * @returns a promise for the hash of the realized directory.
@@ -105,14 +158,14 @@ export class ContentStore {
     const hash = this.hasher.hashEntries(entries);
     return this.realizeHashedVirtualDirectory(location, hash, entries);
   }
-  
+
   private enterHashedVirtualDirectory(hash: string, entries: Entries): Promise<void> {
     if (this.entering[hash]) {
       return this.entering[hash];
     }
     return this.entering[hash] = this.enterHashVirtualDirectoryImpl(hash, entries);
   }
-  
+
   private async enterHashVirtualDirectoryImpl(hash: string, entries: Entries): Promise<void> {
     const fullHashName = this.cacheNameOfHash(hash);
     if (!(await existsp(fullHashName))) {
@@ -165,29 +218,43 @@ export class ContentStore {
       }));
     }
   }
-  
+
   private enterHashedFile(filename: string, hash: string): Promise<void> {
     if (this.entering[hash]) {
       return this.entering[hash];
     }
-    let fullCacheName = this.cacheNameOfHash(hash);
-    let result = existsp(fullCacheName).then(exists => {
-      if (!exists) {
-        return mkdirpp(path.dirname(fullCacheName)).then(made => {
-          return copyFile(filename, fullCacheName);
-        });
-      }
-    });    
-    this.entering[hash] = result;
-    return result;
+    return this.entering[hash] = this.enterHashedFileImpl(filename, hash);
   }
-  
+
   private async enterHashedFileImpl(filename: string, hash: string): Promise<void> {
     let fullCacheName = this.cacheNameOfHash(hash);
     if (!(await existsp(fullCacheName))) {
       await mkdirpp(path.dirname(fullCacheName));
       await copyFile(filename, fullCacheName);
     }
+  }
+
+  private async enterStream(stream: fs.ReadStream): Promise<string> {
+    await mkdirpp(this.location);
+    const tmpFile = await tmpFileName(this.location);
+    const writeStream = fs.createWriteStream(tmpFile);
+    const hash = await copyStream(stream, writeStream);
+    if (this.entering[hash]) {
+      await this.entering[hash];
+    }
+    else {
+      await (this.entering[hash] = this.enterHashedStream(tmpFile, hash));
+    }
+    return hash;
+  }
+
+  private async enterHashedStream(tmpFile: string, hash: string): Promise<void> {
+    let fullCacheName = this.cacheNameOfHash(hash);
+    if (!(await existsp(fullCacheName))) {
+      await mkdirpp(path.dirname(fullCacheName));
+      await link(tmpFile, fullCacheName);
+    }
+    await unlink(tmpFile);
   }
 
   private cacheNameOfHash(hash: string): string {
