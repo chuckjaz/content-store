@@ -38,7 +38,7 @@ function rmdirRecursiveSync(root: string) {
 
   do {
     var
-      dir = dirs.pop(),
+      dir = <string>dirs.pop(),
       deferred = false,
       files = fs.readdirSync(dir);
 
@@ -103,7 +103,7 @@ function filter(entries: Entries, hasher: FileHasher, cb: (entry: FileEntry) => 
       return undefined;
     }
   }).filter(e => e !== undefined);
-  return newEntries;
+  return <Entries>newEntries;
 }
 
 describe('content-store', () => {
@@ -164,23 +164,29 @@ describe('content-store', () => {
     }));
   });
 
-  it('should be able to enter and realize a tree', () => {
+  it('should be able to enter and realize a tree', async () => {
     let original = tmpName('test');
     let realized = tmpName('realized');
-    return contentStore.enterDirectory(original).then(hash => {
-      return contentStore.realize(realized, hash);
-    })
-    .then(() => {
-      return Promise.all([
-        hasher.hashDir(original),
-        hasher.hashDir(realized)
-      ])
-      .then(hashes => {
-        expect(hashes[0]).toEqual(hashes[1]);
-      })
-    });
+    let hash = (await contentStore.enterDirectory(original)).hash;
+ 
+    await contentStore.realize(realized, hash);
+    let entries = await Promise.all([
+      hasher.hashDir(original),
+      hasher.hashDir(realized)
+    ]);
+    let originalEntries = entries[0], realizeEntries = entries[1];
+    expect(realizeEntries).toEqual(originalEntries);
   });
 
+  it('should be able to enter a virtual directory', async () => {
+    let original = tmpName('test');
+    await contentStore.enterDirectory(original);
+    let entries = await hasher.hashDir(original);
+    let virtual = filter(entries, hasher, file => file.name != 'test4');
+    let hash = await contentStore.enterVirtualDirectory(virtual);
+    expect(hash).toEqual('d5ad8dc0d2d9f69aa89dc610d22c1747fc608e93');
+  });
+  
   it('should be able to realize a virtual tree', () => {
     let original = tmpName('test');
     let realized = tmpName('realized');

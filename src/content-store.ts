@@ -19,7 +19,7 @@ function existsp(file: string): Promise<boolean> {
 
 class HashTransformStream extends stream.Transform {
   private hasher: crypto.Hash;
-  private result: string;
+  private result: string | null;
 
   constructor(algorithm: string, encoding?: string) {
     super();
@@ -48,7 +48,7 @@ function copyStream(reader: fs.ReadStream, writer: fs.WriteStream): Promise<stri
     const hasher = new HashTransformStream('sha1');
     reader.on('end', () => {
       setImmediate(() => {
-        resolve(hasher.hash);
+        resolve(<string>hasher.hash);
       });
     });
     reader.on('error', reject);
@@ -120,12 +120,24 @@ export class ContentStore {
    * content of the directory and then enters it into the store.
    *
    * @param the directory to enter into the content store.
-   * @returns a promise for the hash of the directory entered into the store.
+   * @returns a promise for the hash and entries of the directory entered into the store.
    */
-  async enterDirectory(directory: string): Promise<string> {
+  async enterDirectory(directory: string): Promise<{ hash: string, entries: Entries }> {
     let results = await this.hasher.hashDir(directory);
     let hash = this.hasher.hashEntries(results);
     await this.enterHashedDirectory(directory, results, hash);
+    return { hash, entries: results };
+  }
+
+  /**
+   * Enter a virtual directory into the content store. The files referenced
+   * by the virtual directory are already assumed to be in the content store.
+   *
+   * @param entries the virtual directory to enter.
+   */
+  async enterVirtualDirectory(entries: Entries): Promise<string> {
+    let hash = this.hasher.hashEntries(entries);
+    await this.enterHashedVirtualDirectory(hash, entries);
     return hash;
   }
 
