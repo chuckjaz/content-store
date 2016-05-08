@@ -85,15 +85,14 @@ describe('content-store', () => {
   it('should be able to enter and realize a tree', async () => {
     let original = tmpName('test');
     let realized = tmpName('realized');
-    let hash = (await contentStore.enterDirectory(original)).hash;
+    let {hash} = await contentStore.enterDirectory(original);
  
     await contentStore.realize(realized, hash);
-    let entries = await Promise.all([
+    let [originalEntries, realizedEntries] = await Promise.all([
       hasher.hashDir(original),
       hasher.hashDir(realized)
     ]);
-    let originalEntries = entries[0], realizeEntries = entries[1];
-    expect(realizeEntries).toEqual(originalEntries);
+    expect(realizedEntries).toEqual(originalEntries);
   });
 
   it('should be able to enter a virtual directory', async () => {
