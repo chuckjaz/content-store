@@ -68,7 +68,8 @@ let mkdirpp = cbToP1(mkdirp);
 let writeFilep = cbToP2<string, any, void>(fs.writeFile);
 let link = cbToP2<string, string, void>(fs.link);
 let unlink = cbToP1<string, void>(fs.unlink);
-let symlinkp = cbToP3<string, string, string, void>(fs.symlink);
+let symlinkp = cbToP3<string, string, string | undefined, void>(fs.symlink);
+let statp = cbToP1<string, fs.Stats>(fs.stat);
 
 async function tmpFileName(location: string): Promise<string> {
   while(true) {
@@ -152,7 +153,12 @@ export class ContentStore {
     if (!(await existsp(fullHashName))) {
       throw new Error(`No cache entry for hash ${hash}`);
     }
-    await link(fullHashName, location);
+    let stat = await statp(fullHashName);
+    if (stat.isDirectory()) {
+      await symlinkp(fullHashName, location, undefined);
+    } else {
+      await link(fullHashName, location);
+    }
     return location;
   }
 
@@ -195,7 +201,7 @@ export class ContentStore {
   private async realizeHashedVirtualDirectory(location: string, hash: string, entries: Entries): Promise<string> {
     const fullHashName = this.cacheNameOfHash(hash);
     await this.enterHashedVirtualDirectory(hash, entries);
-    await link(fullHashName, location);
+    await symlinkp(fullHashName, location, undefined);
     return hash;
   }
 
